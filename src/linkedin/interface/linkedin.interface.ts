@@ -1,3 +1,10 @@
+import {
+  ExperienceLevel,
+  JobType,
+  RemoteFilter,
+  TimeRange,
+} from '../types/linkedin';
+
 export interface LinkedInJobQuery {
   location: string;
   keyword: string;

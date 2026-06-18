@@ -26,33 +26,19 @@ export class LinkedInJobQueryDto {
   country?: string;
 
   @IsOptional()
-  @IsEnum(['Past month', 'Past week', 'Past 24 hours', 'Any time'])
+  @IsEnum(TimeRange)
   time_range?: TimeRange;
 
   @IsOptional()
-  @IsEnum([
-    'Full-time',
-    'Part-time',
-    'Contract',
-    'Temporary',
-    'Internship',
-    'Volunteer',
-  ])
+  @IsEnum(JobType)
   job_type?: JobType;
 
   @IsOptional()
-  @IsEnum([
-    'Internship',
-    'Entry level',
-    'Associate',
-    'Mid-Senior level',
-    'Director',
-    'Executive',
-  ])
+  @IsEnum(ExperienceLevel)
   experience_level?: ExperienceLevel;
 
   @IsOptional()
-  @IsEnum(['On-site', 'Remote', 'Hybrid'])
+  @IsEnum(RemoteFilter)
   remote?: RemoteFilter;
 
   @IsOptional()

@@ -81,8 +81,9 @@ export class LinkedInController {
     }
 
     if (wait === 'true') {
-      // Block until ready (up to 5 minutes)
-      const jobs = await this.linkedInService.pollSnapshot(snapshotId.trim());
+      const jobs = await this.linkedInService.pollSnapshot(snapshotId.trim(), {
+        timeoutMs: 15 * 60 * 1_000,
+      });
       return { count: jobs.length, jobs };
     }
 

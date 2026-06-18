@@ -10,6 +10,31 @@ import {
 export class AmazonService {
   constructor(private readonly configService: ConfigService) {}
 
+  private normalizeAmazonProductUrl(rawUrl: string): string {
+    const asinPattern =
+      /(?:\/dp\/|\/gp\/product\/|\/gp\/aw\/d\/)([A-Z0-9]{10})/i;
+
+    let candidate = rawUrl;
+    try {
+      const parsed = new URL(rawUrl);
+      const nested = parsed.searchParams.get('url');
+      if (nested) {
+        candidate = nested.startsWith('http')
+          ? nested
+          : `https://www.amazon.com${nested.startsWith('/') ? nested : `/${nested}`}`;
+      }
+    } catch {
+      // keep rawUrl
+    }
+
+    const match = candidate.match(asinPattern);
+    if (match) {
+      return `https://www.amazon.com/dp/${match[1].toUpperCase()}`;
+    }
+
+    return rawUrl;
+  }
+
   async getProducts(
     keyword: string,
     options: AmazonScrapeOptions = {},
@@ -26,30 +51,17 @@ export class AmazonService {
       const page = await browser.newPage();
       page.setDefaultNavigationTimeout(2 * 60 * 1000);
 
-      await Promise.all([
-        page.waitForNavigation(),
-        page.goto('https://www.amazon.com'),
-      ]);
-
-      await page.type('#twotabsearchtextbox', keyword);
-      await Promise.all([
-        page.waitForNavigation(),
-        page.click('#nav-search-submit-button'),
-      ]);
-
-      // Apply price filters via URL if provided
-      if (minPrice !== undefined || maxPrice !== undefined) {
-        const currentUrl = page.url();
-        const url = new URL(currentUrl);
-        if (minPrice !== undefined)
-          url.searchParams.set('low-price', String(minPrice));
-        if (maxPrice !== undefined)
-          url.searchParams.set('high-price', String(maxPrice));
-        await Promise.all([
-          page.waitForNavigation(),
-          page.goto(url.toString()),
-        ]);
+      const searchUrl = new URL('https://www.amazon.com/s');
+      searchUrl.searchParams.set('k', keyword);
+      if (minPrice !== undefined) {
+        searchUrl.searchParams.set('low-price', String(minPrice));
       }
+      if (maxPrice !== undefined) {
+        searchUrl.searchParams.set('high-price', String(maxPrice));
+      }
+
+      await page.goto(searchUrl.toString(), { waitUntil: 'domcontentloaded' });
+      await page.waitForSelector('.s-search-results', { timeout: 60_000 });
 
       for (let currentPage = 1; currentPage <= maxPages; currentPage++) {
         const products = await page.$$eval(
@@ -77,7 +89,14 @@ export class AmazonService {
             })),
         );
 
-        allProducts.push(...products);
+        allProducts.push(
+          ...products
+            .filter((product) => product.url)
+            .map((product) => ({
+              ...product,
+              url: this.normalizeAmazonProductUrl(product.url!),
+            })),
+        );
 
         if (currentPage < maxPages) {
           const nextButton = await page.$(
@@ -97,6 +116,8 @@ export class AmazonService {
   async getProductDetails(
     productUrl: string,
   ): Promise<Record<string, unknown>> {
+    const cleanUrl = this.normalizeAmazonProductUrl(productUrl);
+
     const browser = await puppeteer.connect({
       browserWSEndpoint: this.configService.getOrThrow('SBR_WS_ENDPOINT'),
     });
@@ -105,7 +126,7 @@ export class AmazonService {
       const page = await browser.newPage();
       page.setDefaultNavigationTimeout(2 * 60 * 1000);
 
-      await Promise.all([page.waitForNavigation(), page.goto(productUrl)]);
+      await page.goto(cleanUrl, { waitUntil: 'domcontentloaded' });
 
       return await page.evaluate(() => {
         const getText = (selector: string) =>
